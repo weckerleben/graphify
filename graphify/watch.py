@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 # Single source of truth in graphify.paths (#1423); re-exported as _GRAPHIFY_OUT.
+from graphify.extractors.odoo import prune_orphan_odoo_placeholders
 from graphify.paths import (
     GRAPHIFY_OUT as _GRAPHIFY_OUT,
     is_absolute_any_platform,
@@ -2760,6 +2761,10 @@ def _rebuild_code(
                         "_ts_fields", "_ts_static_fields",
                         "_py_fixture", "_py_return_type", "_go_fields",
                         "_go_package_path",
+                        # Odoo layer: raw model/manifest/xml facts, so an unchanged file
+                        # still takes part in the cross-file Odoo resolver.
+                        "_odoo_model", "_odoo_depends", "_odoo_refs", "_odoo_view_model",
+                        "_odoo_xmlid", "_odoo_module",
                     ):
                         if node.get(marker) or (marker.startswith("_cpp_") and isinstance(node.get(marker), (dict, list))):
                             ctx_node[marker] = node[marker]
@@ -3121,6 +3126,7 @@ def _rebuild_code(
         # Inherit the existing graph's directed flag (#2342) so `graphify
         # update` can't silently downgrade a directed graph to undirected -
         # build_from_json defaults to directed=False otherwise.
+        result = prune_orphan_odoo_placeholders(result)
         G = build_from_json(result, directed=bool((existing_graph_data or {}).get("directed", False)))
         candidate_topology = _topology_from_graph(G)
         if existing_graph_data and not legacy_layout:

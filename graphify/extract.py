@@ -74,6 +74,19 @@ from graphify.extractors.fortran import _cpp_preprocess, extract_fortran  # noqa
 from graphify.extractors.go import _GO_PREDECLARED_FUNCS, extract_go  # noqa: F401
 from graphify.extractors.json_config import extract_json  # noqa: F401
 from graphify.extractors.yaml_config import extract_yaml  # noqa: F401
+from graphify.extractors.odoo import (
+    MANIFEST_NAME as _ODOO_MANIFEST_NAME,
+    annotate_python_result as _odoo_annotate_python,
+    extract_odoo_access_csv,
+    extract_odoo_build_metadata,
+    extract_odoo_xml,
+    is_odoo_access_csv,
+    is_odoo_build_metadata,
+    is_odoo_data_xml,
+    is_odoo_symbolless_by_design,
+    odoo_module_dir,
+    resolve_odoo,
+)
 from graphify.extractors.commonlisp import extract_commonlisp  # noqa: F401
 from graphify.extractors.markdown import extract_markdown, _MD_LINK_INDEX_CACHE  # noqa: F401
 from graphify.extractors.ocaml import extract_ocaml  # noqa: F401
@@ -237,7 +250,7 @@ def _safe_extract(
     extractor: Callable, path: Path, *, scan_root: Path | None = None
 ) -> dict:
     try:
-        if extractor is extract_python:
+        if extractor is extract_python or extractor is extract_python_odoo:
             return _redact_rationale_labels(extractor(path, root=scan_root))
         return _redact_rationale_labels(extractor(path))
     except RecursionError:
@@ -2281,6 +2294,11 @@ def extract_python(path: Path, *, root: Path | None = None) -> dict:
     if "error" not in result:
         _extract_python_rationale(path, result)
     return result
+
+
+def extract_python_odoo(path: Path, *, root: Path | None = None) -> dict:
+    """``extract_python`` plus Odoo model/manifest facts for files in an Odoo module."""
+    return _odoo_annotate_python(path, extract_python(path, root=root))
 
 
 _TS_TYPED_TAG_RE = re.compile(
@@ -9568,6 +9586,9 @@ _KOTLIN_IMPORT_TARGET_RESOLVER = LanguageResolver(
 # by adding one register() call below — no edits to extract()'s body. Order
 # preserved from the prior inlined wiring: Swift (#1356) before Python (#1446).
 register_language_resolver(
+    LanguageResolver("odoo_links", frozenset({".py", ".xml", ".csv"}), resolve_odoo)
+)
+register_language_resolver(
     LanguageResolver("terraform_modules", frozenset({".tf"}), resolve_terraform_modules)
 )
 register_language_resolver(
@@ -11050,11 +11071,21 @@ def _get_extractor(path: Path, *, sniff_headers: bool = True) -> Any | None:
     # Package manifests (apm.yml, pyproject.toml, go.mod, pom.xml) → a canonical
     # package node + depends_on edges, by filename before generic suffix dispatch
     # (#1377). apm.yml would otherwise be a .yml document handled by the LLM.
+    if is_odoo_build_metadata(path):
+        return extract_odoo_build_metadata
     if is_package_manifest_path(path):
         return extract_package_manifest
     # A project-declared remap (.graphifyrc `language.inc=php`, #2961) wins
     # over every sniff below: the user has said what the extension means in
     # this repo, so a remapped `.h`/`.m` also skips the C++/ObjC probes.
+    if path.name == _ODOO_MANIFEST_NAME or (
+        path.suffix == ".py" and odoo_module_dir(path) is not None
+    ):
+        return extract_python_odoo
+    if is_odoo_access_csv(path):
+        return extract_odoo_access_csv
+    if path.suffix == ".xml" and is_odoo_data_xml(path):
+        return extract_odoo_xml
     remapped = effective_suffix(path)
     if remapped != path.suffix:
         return _DISPATCH.get(remapped) or _DISPATCH.get(remapped.lower())
@@ -11845,6 +11876,12 @@ def extract(
         _res = per_file[i] or {}
         if _res.get("parse_errors") or _res.get("error") or _res.get("skipped"):
             continue
+        if _res.get("data_only"):
+            continue  # Odoo seed XML/CSV: a legitimate data file with no symbols
+        if _p.name == "__init__.py" and odoo_module_dir(_p) is not None:
+            continue  # Odoo module wiring (`from . import models`), nothing to model
+        if is_odoo_symbolless_by_design(_p):
+            continue  # neutralize.sql, OCA readme fragments
         if _get_extractor(_p) is None:
             continue
         if len(_res.get("nodes", [])) != 1:
@@ -13577,7 +13614,7 @@ def collect_files(target: Path, *, follow_symlinks: bool = False, root: Path | N
             for fname in filenames:
                 p = dp / fname
                 suffix = p.suffix
-                if (suffix in _EXTENSIONS or suffix.lower() in _EXTENSIONS) and not _ignored(p) and not _is_installed_graphify_file(p) and _resolves_under_root(p, containment_root):
+                if (suffix in _EXTENSIONS or suffix.lower() in _EXTENSIONS or is_odoo_access_csv(p) or (suffix == ".xml" and is_odoo_data_xml(p))) and not _ignored(p) and not _is_installed_graphify_file(p) and _resolves_under_root(p, containment_root):
                     results.append(p)
         return sorted(results)
     # Walk with symlink following + cycle detection
@@ -13598,7 +13635,7 @@ def collect_files(target: Path, *, follow_symlinks: bool = False, root: Path | N
         for fname in filenames:
             p = dp / fname
             suffix = p.suffix
-            if (suffix in _EXTENSIONS or suffix.lower() in _EXTENSIONS) and not _ignored(p) and not _is_installed_graphify_file(p) and _resolves_under_root(p, containment_root):
+            if (suffix in _EXTENSIONS or suffix.lower() in _EXTENSIONS or is_odoo_access_csv(p) or (suffix == ".xml" and is_odoo_data_xml(p))) and not _ignored(p) and not _is_installed_graphify_file(p) and _resolves_under_root(p, containment_root):
                 results.append(p)
     return sorted(results)
 

@@ -129,6 +129,19 @@ def _learning_section(lines: list, learning: dict | None, top_n: int = 10) -> No
                          + (f" -> {nodes}" if nodes else ""))
 
 
+_ODOO_HUB_KINDS = {"model": "model hub", "module": "module", "field": "field"}
+
+
+def _odoo_hub_note(G: nx.Graph, node: dict) -> str:
+    """Say that a high-degree Odoo hub is an inherent hub, not a code smell."""
+    data = G.nodes.get(node.get("id"), {})
+    kind = _ODOO_HUB_KINDS.get(data.get("odoo_kind"))
+    if not kind:
+        return ""
+    external = ", not defined in this corpus" if data.get("defined_in_corpus") is False else ""
+    return f" (Odoo {kind}{external})"
+
+
 def generate(
     G: nx.Graph,
     communities: dict[int, list[str]],
@@ -279,7 +292,7 @@ def generate(
         "## God Nodes (most connected - your core abstractions)",
     ]
     for i, node in enumerate(god_node_list, 1):
-        lines.append(f"{i}. `{node['label']}` - {node['degree']} edges")
+        lines.append(f"{i}. `{node['label']}`{_odoo_hub_note(G, node)} - {node['degree']} edges")
 
     lines += ["", "## Surprising Connections (you probably didn't know these)"]
     if surprise_list:

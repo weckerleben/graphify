@@ -553,6 +553,11 @@ def classify_file(path: Path) -> FileType | None:
     # Compound extensions must be checked before simple suffix lookup
     if path.name.lower().endswith(".blade.php"):
         return FileType.CODE
+    # Odoo data/view XML and ir.model.access.csv are parsed deterministically
+    # (graphify.extractors.odoo); every other .xml/.csv keeps its old treatment.
+    from graphify.extractors.odoo import is_odoo_access_csv, is_odoo_data_xml
+    if is_odoo_access_csv(path) or is_odoo_data_xml(path):
+        return FileType.CODE
     # A project may declare what an ambiguous extension means to it
     # (.graphifyrc `language.inc=php`, #2961); classify by the declared one.
     ext = effective_suffix(path).lower()
