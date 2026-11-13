@@ -2,6 +2,10 @@
 
 Full release notes with details on each version: [GitHub Releases](https://github.com/Graphify-Labs/graphify/releases)
 
+## Unreleased
+
+- Feat: **odoo** opt-in Odoo layer: `_name`/`_inherit`/`_inherits`, fields, `@api.depends/constrains/onchange`, manifest `depends`, XML records (views with `arch` fields and xpath targets, actions, menus, rules, groups, crons) and `ir.model.access.csv` rows become linked nodes; gated by `__manifest__.py`, an `<odoo>` XML root or the access CSV, so other corpora are unchanged. Incremental and watch rebuilds match a full rebuild.
+
 ## 0.9.108 (2026-11-12)
 
 - Fix: **csharp** a member call on a receiver typed by a lowercase, underscore-prefixed or keyword-like type (`_Pair`, `pair`, a field or primary-constructor parameter so typed) now binds, and a static call like `pair.Create()` resolves; namespace and unknown receivers still fail closed. Classic extension-method calls on `bool`/`char?` receivers also bind (#5174, thanks @JensD-git).

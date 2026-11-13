@@ -238,6 +238,37 @@ its inferred edge while retaining the existing callee/receiver deduplication.
 This is static branch-wise syntax coverage, not proof that all branches execute together.
 AST cache schema 43 invalidates older template and conditional recovery records.
 
+## Odoo layer
+
+`graphify/extractors/odoo.py` links what Odoo wires through strings. It is
+opt-in by marker, so other corpora extract byte-for-byte as before: a
+`__manifest__.py`, a data XML whose root is `<odoo>`/`<openerp>`, and
+`ir.model.access.csv`.
+
+Per-file extraction only stamps raw facts on nodes (`_odoo_model`,
+`_odoo_depends`, `_odoo_refs`, `_odoo_xmlid`), so they survive the AST cache and
+are forwarded to the incremental resolver. The registered `odoo_links` resolver
+then mints hub nodes (`odoo_model:`, `odoo_module:`, `odoo_field:`) and edges:
+
+| Relation | Meaning |
+|----------|---------|
+| `defines_model` / `extends_model` / `inherits_model` / `delegates_to` | `_name`, `_inherit` (incl. `_name` repeated in `_inherit`), `_inherits` |
+| `extends` | extension class to the corpus class that defines the model (`INFERRED`) |
+| `has_field`, `relates_to` | declared fields; Many2one/One2many/Many2many model to comodel |
+| `depends_on_field`, `computes`, `constrains`, `onchange` | `@api.depends` paths (followed through comodels), `@api.constrains`, `@api.onchange` |
+| `depends_on` | manifest `depends` |
+| `view_of`, `inherits_view`, `uses_view`, `shows_field`, `patches_field`, `calls_method` | views, `arch` fields, xpath/position targets, object buttons |
+| `acts_on`, `opens`, `child_of` | actions, `<menuitem>` and `<act_window>` |
+| `rule_for`, `grants_access_to`, `for_group` | `ir.rule`, access CSV rows, groups |
+| `overrides` | a record redefined in another module, to the canonical one |
+| `seeds_data` | file seeds N records of a non-structural model (counted, not minted) |
+
+Explicit strings are `EXTRACTED`; links resolved by name (`model_x_y` back to
+`x.y`, dotted paths, extension class to defining class) are `INFERRED`. Models,
+modules and fields absent from the corpus get a placeholder with
+`defined_in_corpus: false`; an incremental rebuild prunes placeholders no edge
+references any more. The report labels Odoo hubs among the god nodes.
+
 ## Adding a new language extractor
 
 1. Add an `extract_<lang>(path: Path) -> dict` function following the existing pattern (tree-sitter parse → walk nodes → collect `nodes` and `edges` → call-graph second pass for INFERRED `calls` edges). New languages go in their own module under `graphify/extractors/` - see `graphify/extractors/MIGRATION.md`; `extract.py` re-exports them while the existing ones are ported out of it.
