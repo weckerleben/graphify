@@ -5,6 +5,7 @@ Full release notes with details on each version: [GitHub Releases](https://githu
 ## Unreleased
 
 - Feat: **odoo** opt-in Odoo layer: `_name`/`_inherit`/`_inherits`, fields, `@api.depends/constrains/onchange`, manifest `depends`, XML records (views with `arch` fields and xpath targets, actions, menus, rules, groups, crons) and `ir.model.access.csv` rows become linked nodes; gated by `__manifest__.py`, an `<odoo>` XML root or the access CSV, so other corpora are unchanged. Incremental and watch rebuilds match a full rebuild.
+- Fix: **watch** `graphify watch` now rebuilds on edits to XML/CSV files inside an Odoo module (a directory tree with `__manifest__.py`); XML/CSV elsewhere stay ignored. The missing-watchdog error points at `pip install "graphifyy[watch]"`.
 
 ## 0.9.108 (2026-11-12)
 

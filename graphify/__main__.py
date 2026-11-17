@@ -909,7 +909,7 @@ def _run_cli() -> None:
         print("    --author \"Name\"         tag the author of the content")
         print("    --contributor \"Name\"    tag who added it to the corpus")
         print("    --dir <path>            target directory (default: ./raw)")
-        print("  watch <path>            watch a folder and rebuild the graph on code changes")
+        print("  watch <path>            watch a folder and rebuild the graph on code changes (incl. Odoo module XML/CSV)")
         print("  update <path>           re-extract code files and update the graph (no LLM needed)")
         print("    --force                 overwrite graph.json even if the rebuild has fewer nodes")
         print("                            (also: GRAPHIFY_FORCE=1 env var; use after refactors that delete code)")

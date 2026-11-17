@@ -17,7 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 # Single source of truth in graphify.paths (#1423); re-exported as _GRAPHIFY_OUT.
-from graphify.extractors.odoo import prune_orphan_odoo_placeholders
+from graphify.extractors.odoo import odoo_module_dir, prune_orphan_odoo_placeholders
 from graphify.paths import (
     GRAPHIFY_OUT as _GRAPHIFY_OUT,
     is_absolute_any_platform,
@@ -499,6 +499,24 @@ from graphify.rcfile import (
 
 _WATCHED_EXTENSIONS = CODE_EXTENSIONS | DOC_EXTENSIONS | PAPER_EXTENSIONS | IMAGE_EXTENSIONS
 _CODE_EXTENSIONS = CODE_EXTENSIONS
+_ODOO_DATA_EXTENSIONS = frozenset({".xml", ".csv"})
+
+
+def _is_odoo_data_path(path: Path) -> bool:
+    """XML/CSV inside an Odoo module tree (a `__manifest__.py` above it).
+
+    Decided by location, not content, so a deleted file still counts. The
+    extractor itself skips module XML that is not Odoo data.
+    """
+    return path.suffix.lower() in _ODOO_DATA_EXTENSIONS and odoo_module_dir(path) is not None
+
+
+def _is_code_path(path: Path) -> bool:
+    return effective_suffix(path).lower() in _CODE_EXTENSIONS or _is_odoo_data_path(path)
+
+
+def _is_watched_path(path: Path) -> bool:
+    return effective_suffix(path).lower() in _WATCHED_EXTENSIONS or _is_odoo_data_path(path)
 
 
 def _report_root_label(watch_path: Path) -> str:
@@ -3480,7 +3498,7 @@ def _notify_only(watch_path: Path) -> None:
 
 
 def _has_non_code(changed_paths: list[Path]) -> bool:
-    return any(effective_suffix(p).lower() not in _CODE_EXTENSIONS for p in changed_paths)
+    return any(not _is_code_path(p) for p in changed_paths)
 
 
 def _batch_triggers_rebuild(batch: list[Path]) -> bool:
@@ -3492,7 +3510,7 @@ def _batch_triggers_rebuild(batch: list[Path]) -> bool:
     this, a doc-only deletion batch would sit behind the needs_update flag
     until the next code event or a manual `graphify update` (#2580).
     """
-    has_code = any(effective_suffix(p).lower() in _CODE_EXTENSIONS for p in batch)
+    has_code = any(_is_code_path(p) for p in batch)
     has_deletion = any(not p.exists() for p in batch)
     return has_code or has_deletion
 
@@ -3625,7 +3643,7 @@ def watch(watch_path: Path, debounce: float = 3.0) -> None:
         from watchdog.observers.polling import PollingObserver
         from watchdog.events import FileCreatedEvent, FileSystemEventHandler
     except ImportError as e:
-        raise ImportError("watchdog not installed. Run: pip install watchdog") from e
+        raise ImportError('watchdog not installed. Run: pip install "graphifyy[watch]"') from e
 
     last_trigger: float = 0.0
     pending: bool = False
@@ -3708,7 +3726,7 @@ def watch(watch_path: Path, debounce: float = 3.0) -> None:
             if ignore_patterns and _is_ignored(path, watch_root_for_ignore, ignore_patterns):
                 return
             set_language_overrides(override_snapshot)
-            if effective_suffix(path).lower() not in _WATCHED_EXTENSIONS:
+            if not _is_watched_path(path):
                 return
             try:
                 filter_parts = path.relative_to(watch_root_for_ignore).parts
@@ -3817,8 +3835,8 @@ def watch(watch_path: Path, debounce: float = 3.0) -> None:
     observer.start()
 
     print(f"[graphify watch] Watching {watch_path.resolve()} - press Ctrl+C to stop")
-    print(f"[graphify watch] Code changes rebuild graph automatically. "
-          f"Doc/image changes require /graphify --update.")
+    print(f"[graphify watch] Code changes (and Odoo module XML/CSV) rebuild graph "
+          f"automatically. Doc/image changes require /graphify --update.")
     print(f"[graphify watch] Debounce: {debounce}s")
 
     try:
